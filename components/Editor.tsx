@@ -122,6 +122,128 @@ export default function Editor({
     }
   };
 
+  // Smart list behavior for note editor
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Only handle Enter without Shift
+    if (e.key !== "Enter" || e.shiftKey) {
+      return;
+    }
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const { selectionStart, selectionEnd, value } = textarea;
+
+    // Find the current line boundaries
+    const beforeCursor = value.substring(0, selectionStart);
+    const afterCursor = value.substring(selectionEnd);
+
+    // Find the start of the current line (after the last newline before cursor)
+    const lineStart = beforeCursor.lastIndexOf("\n") + 1;
+    // Find the end of the current line (before the first newline after cursor, or end of text)
+    const lineEndRelative = afterCursor.indexOf("\n");
+    const lineEnd = lineEndRelative === -1 ? value.length : selectionEnd + lineEndRelative;
+
+    const currentLine = value.substring(lineStart, lineEnd);
+
+    // Check for dash bullet: /^\s*-\s/
+    const dashMatch = currentLine.match(/^(\s*-\s)/);
+    // Check for numbered bullet: /^\s*(\d+)\.\s/
+    const numberedMatch = currentLine.match(/^(\s*)(\d+)\.\s/);
+
+    if (dashMatch) {
+      const bulletPrefix = dashMatch[1]; // e.g., "  - "
+      const textAfterBullet = currentLine.substring(bulletPrefix.length);
+
+      if (textAfterBullet.trim() === "") {
+        // Empty bullet line - remove the bullet marker, leave empty line
+        e.preventDefault();
+
+        // Replace the current line content (bullet prefix) with empty string
+        const newValue = value.substring(0, lineStart) + value.substring(lineEnd);
+
+        isUserTyping.current = true;
+        setLocalContent(newValue);
+
+        // Set cursor position at the line start (which is now empty)
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.selectionStart = lineStart;
+            textareaRef.current.selectionEnd = lineStart;
+          }
+        }, 0);
+      } else {
+        // Has content after bullet - insert new bullet line
+        e.preventDefault();
+
+        const newLine = "\n" + bulletPrefix;
+        const newValue = value.substring(0, selectionEnd) + newLine + value.substring(selectionEnd);
+
+        // Only apply if within character limit
+        if (newValue.length <= MAX_CONTENT_LENGTH) {
+          isUserTyping.current = true;
+          setLocalContent(newValue);
+
+          // Set cursor position after the new bullet
+          setTimeout(() => {
+            if (textareaRef.current) {
+              const newCursorPos = selectionEnd + newLine.length;
+              textareaRef.current.selectionStart = newCursorPos;
+              textareaRef.current.selectionEnd = newCursorPos;
+            }
+          }, 0);
+        }
+      }
+    } else if (numberedMatch) {
+      const indent = numberedMatch[1]; // leading spaces
+      const currentNumber = parseInt(numberedMatch[2], 10);
+      const fullPrefix = numberedMatch[0]; // e.g., "  1. "
+      const textAfterBullet = currentLine.substring(fullPrefix.length);
+
+      if (textAfterBullet.trim() === "") {
+        // Empty numbered line - remove the bullet marker, leave empty line
+        e.preventDefault();
+
+        // Replace the current line content (bullet prefix) with empty string
+        const newValue = value.substring(0, lineStart) + value.substring(lineEnd);
+
+        isUserTyping.current = true;
+        setLocalContent(newValue);
+
+        // Set cursor position at the line start (which is now empty)
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.selectionStart = lineStart;
+            textareaRef.current.selectionEnd = lineStart;
+          }
+        }, 0);
+      } else {
+        // Has content after bullet - insert new numbered line with incremented number
+        e.preventDefault();
+
+        const nextNumber = currentNumber + 1;
+        const newLine = "\n" + indent + nextNumber + ". ";
+        const newValue = value.substring(0, selectionEnd) + newLine + value.substring(selectionEnd);
+
+        // Only apply if within character limit
+        if (newValue.length <= MAX_CONTENT_LENGTH) {
+          isUserTyping.current = true;
+          setLocalContent(newValue);
+
+          // Set cursor position after the new bullet
+          setTimeout(() => {
+            if (textareaRef.current) {
+              const newCursorPos = selectionEnd + newLine.length;
+              textareaRef.current.selectionStart = newCursorPos;
+              textareaRef.current.selectionEnd = newCursorPos;
+            }
+          }, 0);
+        }
+      }
+    }
+    // For non-list lines, let Enter behave normally (don't prevent default)
+  };
+
   // Checklist handlers
   const handleAddItem = () => {
     // Don't add if at the free limit
@@ -224,6 +346,7 @@ export default function Editor({
                 ref={textareaRef}
                 value={localContent}
                 onChange={handleContentChange}
+                onKeyDown={handleTextareaKeyDown}
                 placeholder="Start writing..."
                 className="
                   w-full min-h-[60vh] resize-none bg-transparent
