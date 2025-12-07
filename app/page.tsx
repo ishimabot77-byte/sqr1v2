@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   getProjects,
   createProject,
@@ -66,8 +67,28 @@ export default function HomePage() {
       {/* Header */}
       <header className="border-b border-neutral-800">
         <div className="max-w-4xl mx-auto px-6 py-8">
-          <h1 className="text-3xl font-semibold tracking-tight">SQR1</h1>
-          <p className="text-neutral-500 mt-1">Your notes, organized.</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-semibold tracking-tight">SQR1</h1>
+              <p className="text-neutral-500 mt-1">Every project starts here.</p>
+            </div>
+
+            {/* Nav Tabs */}
+            <nav className="flex gap-2">
+              <Link
+                href="/"
+                className="px-3 py-1.5 rounded-md text-sm bg-neutral-800 text-neutral-100"
+              >
+                Projects
+              </Link>
+              <Link
+                href="/calendar"
+                className="px-3 py-1.5 rounded-md text-sm bg-neutral-900 text-neutral-400 hover:text-neutral-200 transition-colors"
+              >
+                Calendar
+              </Link>
+            </nav>
+          </div>
         </div>
       </header>
 
@@ -139,7 +160,7 @@ export default function HomePage() {
           ) : (
             <div className="text-center py-6 bg-neutral-900 border border-neutral-800 rounded-lg">
               <p className="text-neutral-400 mb-2">
-                You've reached the free project limit ({MAX_PROJECTS} projects)
+                You&#39;ve reached the free project limit ({MAX_PROJECTS} projects)
               </p>
               <button className="text-white hover:text-gray-300 font-medium transition-colors">
                 Upgrade for unlimited projects →

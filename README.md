@@ -80,3 +80,4 @@ Data is persisted in localStorage under the key `sqr1-projects`.
 
 
 
+

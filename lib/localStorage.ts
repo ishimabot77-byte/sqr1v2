@@ -1,4 +1,14 @@
-import { Project, Tab, ChecklistItem, STORAGE_KEY, MAX_PROJECTS, MAX_TABS } from "./types";
+import { 
+  Project, 
+  Tab, 
+  ChecklistItem, 
+  CalendarEvent,
+  STORAGE_KEY, 
+  EVENTS_STORAGE_KEY,
+  MAX_PROJECTS, 
+  MAX_TABS,
+  MAX_EVENTS_PER_MONTH 
+} from "./types";
 
 // Generate unique ID
 export function generateId(): string {
@@ -157,4 +167,104 @@ export function canCreateProject(): boolean {
 export function canAddTab(projectId: string): boolean {
   const project = getProject(projectId);
   return project ? project.tabs.length < MAX_TABS : false;
+}
+
+// ==========================================
+// Calendar Events
+// ==========================================
+
+// Get all events from localStorage
+export function getEvents(): CalendarEvent[] {
+  if (typeof window === "undefined") return [];
+  
+  try {
+    const data = localStorage.getItem(EVENTS_STORAGE_KEY);
+    if (!data) return [];
+    
+    return JSON.parse(data) as CalendarEvent[];
+  } catch {
+    return [];
+  }
+}
+
+// Save all events to localStorage
+export function saveEvents(events: CalendarEvent[]): void {
+  if (typeof window === "undefined") return;
+  
+  localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(events));
+}
+
+// Get the year-month string from a date string (e.g., "2025-12-04" -> "2025-12")
+export function getYearMonth(dateString: string): string {
+  return dateString.substring(0, 7);
+}
+
+// Count events for a specific year-month
+export function countEventsInMonth(yearMonth: string): number {
+  const events = getEvents();
+  return events.filter((e) => getYearMonth(e.date) === yearMonth).length;
+}
+
+// Check if we can create an event for a specific date
+export function canCreateEvent(date: string): boolean {
+  const yearMonth = getYearMonth(date);
+  return countEventsInMonth(yearMonth) < MAX_EVENTS_PER_MONTH;
+}
+
+// Create a new event
+export function createEvent(
+  title: string,
+  date: string,
+  description?: string,
+  projectId?: string
+): CalendarEvent | null {
+  if (!canCreateEvent(date)) {
+    return null;
+  }
+  
+  const events = getEvents();
+  
+  const newEvent: CalendarEvent = {
+    id: generateId(),
+    title,
+    date,
+    description,
+    projectId,
+  };
+  
+  events.push(newEvent);
+  saveEvents(events);
+  
+  return newEvent;
+}
+
+// Delete an event
+export function deleteEvent(id: string): void {
+  const events = getEvents();
+  const filtered = events.filter((e) => e.id !== id);
+  saveEvents(filtered);
+}
+
+// Get events for a specific date
+export function getEventsForDate(date: string, projectId?: string): CalendarEvent[] {
+  const events = getEvents();
+  return events.filter((e) => {
+    const dateMatch = e.date === date;
+    if (projectId !== undefined) {
+      return dateMatch && e.projectId === projectId;
+    }
+    return dateMatch;
+  });
+}
+
+// Get events for a specific month (for calendar display)
+export function getEventsForMonth(yearMonth: string, projectId?: string): CalendarEvent[] {
+  const events = getEvents();
+  return events.filter((e) => {
+    const monthMatch = getYearMonth(e.date) === yearMonth;
+    if (projectId !== undefined) {
+      return monthMatch && e.projectId === projectId;
+    }
+    return monthMatch;
+  });
 }

@@ -32,7 +32,7 @@ export default function PricingPage() {
 
         {/* Description */}
         <p className="text-neutral-400 leading-relaxed mb-8">
-          You've found the upgrade page. Paid plans with unlimited checklist items
+          You&#39;ve found the upgrade page. Paid plans with unlimited checklist items
           and more are coming soon.
         </p>
 

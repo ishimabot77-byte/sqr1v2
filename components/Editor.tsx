@@ -393,7 +393,7 @@ export default function Editor({
                   {isAtChecklistLimit && (
                     <div className="mt-4 p-4 bg-neutral-800/70 border border-neutral-600 rounded-lg">
                       <p className="text-neutral-300 text-sm mb-3">
-                        You've reached the free limit: {MAX_FREE_CHECKLIST_ITEMS} checklist items per tab. 
+                        You&#39;ve reached the free limit: {MAX_FREE_CHECKLIST_ITEMS} checklist items per tab. 
                         Upgrade to create unlimited items.
                       </p>
                       <button
