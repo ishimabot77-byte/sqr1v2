@@ -11,20 +11,13 @@ import {
   countEventsInMonth,
   getProjects,
 } from "@/lib/localStorage";
-import { CalendarEvent, Project, MAX_EVENTS_PER_MONTH } from "@/lib/types";
-
-// Predefined colors for event color picker
-const EVENT_COLORS = [
-  { name: "Red", value: "#ef4444" },
-  { name: "Blue", value: "#3b82f6" },
-  { name: "Green", value: "#22c55e" },
-  { name: "Yellow", value: "#eab308" },
-  { name: "Pink", value: "#ec4899" },
-  { name: "Purple", value: "#a855f7" },
-  { name: "Orange", value: "#f97316" },
-  { name: "Black", value: "#171717" },
-  { name: "White", value: "#fafafa" },
-];
+import { 
+  CalendarEvent, 
+  Project, 
+  MAX_EVENTS_PER_MONTH, 
+  EventColor, 
+  EVENT_COLOR_OPTIONS 
+} from "@/lib/types";
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -59,7 +52,7 @@ export default function Calendar() {
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDescription, setNewEventDescription] = useState("");
   const [newEventProjectId, setNewEventProjectId] = useState<string>("");
-  const [newEventColor, setNewEventColor] = useState<string>("");
+  const [newEventColor, setNewEventColor] = useState<EventColor | "">("");
   const newEventTitleRef = useRef<HTMLInputElement>(null);
 
   // Edit event state
@@ -68,7 +61,7 @@ export default function Calendar() {
   const [editDescription, setEditDescription] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editProjectId, setEditProjectId] = useState<string>("");
-  const [editColor, setEditColor] = useState<string>("");
+  const [editColor, setEditColor] = useState<EventColor | "">("");
 
   // Delete confirmation state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -605,7 +598,7 @@ export default function Calendar() {
                       `}
                       title="No color"
                     />
-                    {EVENT_COLORS.map((color) => {
+                    {EVENT_COLOR_OPTIONS.map((color) => {
                       const isSelected = editColor === color.value;
                       const needsBorder = color.value === "#171717" || color.value === "#fafafa";
                       return (
@@ -771,7 +764,7 @@ export default function Calendar() {
                     `}
                     title="No color"
                   />
-                  {EVENT_COLORS.map((color) => {
+                  {EVENT_COLOR_OPTIONS.map((color) => {
                     const isSelected = newEventColor === color.value;
                     const needsBorder = color.value === "#171717" || color.value === "#fafafa";
                     return (

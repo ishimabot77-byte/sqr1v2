@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_CONTENT_LENGTH, ChecklistItem } from "@/lib/types";
 import { generateId } from "@/lib/localStorage";
@@ -65,7 +65,7 @@ export default function Editor({
    * Scrolls textarea just enough to keep caret visible with ~2 lines of padding below.
    * Only adjusts textarea.scrollTop, never window/body scroll (prevents jump bug).
    */
-  const scrollCaretIntoView = () => {
+  const scrollCaretIntoView = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea || mode !== "note") return;
 
@@ -95,7 +95,7 @@ export default function Editor({
       textarea.scrollTop = caretY;
     }
     // Otherwise do nothing - caret is already visible
-  };
+  }, [mode]);
 
   // Sync with prop changes (when switching tabs)
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function Editor({
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [localContent, mode]);
+  }, [localContent, mode, scrollCaretIntoView]);
 
   // Debounced save for note content - triggers 800ms after user stops typing
   useEffect(() => {

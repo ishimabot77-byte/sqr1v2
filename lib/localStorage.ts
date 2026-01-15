@@ -3,6 +3,7 @@ import {
   Tab, 
   ChecklistItem, 
   CalendarEvent,
+  EventColor,
   STORAGE_KEY, 
   EVENTS_STORAGE_KEY,
   MAX_PROJECTS, 
@@ -217,7 +218,7 @@ export function createEvent(
   date: string,
   description?: string,
   projectId?: string,
-  color?: string
+  color?: EventColor
 ): CalendarEvent | null {
   if (!canCreateEvent(date)) {
     return null;

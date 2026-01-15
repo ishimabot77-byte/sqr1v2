@@ -18,7 +18,7 @@ export interface Project {
   tabs: Tab[];
 }
 
-// Allowed event colors
+// Allowed event colors (hex values)
 export type EventColor = 
   | "#ef4444" // Red
   | "#3b82f6" // Blue
@@ -29,6 +29,19 @@ export type EventColor =
   | "#f97316" // Orange
   | "#171717" // Black
   | "#fafafa"; // White
+
+// Event color options with display names
+export const EVENT_COLOR_OPTIONS: { name: string; value: EventColor }[] = [
+  { name: "Red", value: "#ef4444" },
+  { name: "Blue", value: "#3b82f6" },
+  { name: "Green", value: "#22c55e" },
+  { name: "Yellow", value: "#eab308" },
+  { name: "Pink", value: "#ec4899" },
+  { name: "Purple", value: "#a855f7" },
+  { name: "Orange", value: "#f97316" },
+  { name: "Black", value: "#171717" },
+  { name: "White", value: "#fafafa" },
+];
 
 // Calendar Event type
 export interface CalendarEvent {
