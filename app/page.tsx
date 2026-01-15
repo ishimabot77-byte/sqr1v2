@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -10,6 +10,7 @@ import {
   canCreateProject,
 } from "@/lib/localStorage";
 import { Project, MAX_PROJECTS } from "@/lib/types";
+import SwipeRevealRow from "@/components/SwipeRevealRow";
 
 export default function HomePage() {
   const router = useRouter();
@@ -17,11 +18,50 @@ export default function HomePage() {
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectTitle, setNewProjectTitle] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Device detection: true for touch/coarse pointer devices, false for desktop
+  const [isTouch, setIsTouch] = useState(false);
+  
+  // Swipe management state
+  const [closeAllSignal, setCloseAllSignal] = useState(0);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Store confirm modal openers for each project row (for desktop trash icon)
+  const confirmOpenersRef = useRef<Map<string, () => void>>(new Map());
 
   useEffect(() => {
     setProjects(getProjects());
     setIsLoaded(true);
+    
+    // Detect touch capability after mount (client-side only)
+    const detectTouch = () => {
+      const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+      const hasTouchPoints = navigator.maxTouchPoints > 0;
+      setIsTouch(hasCoarsePointer || hasTouchPoints);
+    };
+    
+    detectTouch();
   }, []);
+
+  // Close all swipe rows when tapping outside
+  const handleContainerClick = (e: React.MouseEvent) => {
+    // Only close if clicking directly on the container, not on a row
+    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('[data-swipe-row]') === null) {
+      if (openRowId) {
+        setCloseAllSignal((s) => s + 1);
+        setOpenRowId(null);
+      }
+    }
+  };
+
+  // Handler for when a row requests to close others
+  const handleRequestCloseOthers = (id: string) => {
+    if (openRowId !== id) {
+      setCloseAllSignal((s) => s + 1);
+      setOpenRowId(id);
+    }
+  };
 
   const handleCreateProject = () => {
     if (!newProjectTitle.trim()) return;
@@ -35,12 +75,9 @@ export default function HomePage() {
     }
   };
 
-  const handleDeleteProject = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm("Are you sure you want to delete this project?")) {
-      deleteProject(id);
-      setProjects(getProjects());
-    }
+  const handleDeleteProject = (id: string) => {
+    deleteProject(id);
+    setProjects(getProjects());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -170,7 +207,11 @@ export default function HomePage() {
         </div>
 
         {/* Projects List */}
-        <div className="space-y-3">
+        <div 
+          ref={listContainerRef}
+          className="space-y-3"
+          onClick={handleContainerClick}
+        >
           {projects.length === 0 ? (
             <div className="text-center py-16">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-neutral-900 flex items-center justify-center">
@@ -193,42 +234,74 @@ export default function HomePage() {
             </div>
           ) : (
             projects.map((project) => (
-              <div
+              <SwipeRevealRow
                 key={project.id}
-                onClick={() => router.push(`/project/${project.id}`)}
-                className="
-                  group flex items-center justify-between
-                  px-5 py-4 bg-neutral-900 border border-neutral-800
-                  rounded-lg cursor-pointer
-                  hover:border-neutral-700 hover:bg-neutral-850
-                  transition-all
-                "
+                id={project.id}
+                onDelete={() => handleDeleteProject(project.id)}
+                closeAllSignal={closeAllSignal}
+                onRequestCloseOthers={handleRequestCloseOthers}
+                confirmTitle="Delete project?"
+                confirmBody="This will permanently remove this project and its tabs from this device."
+                enabled={isTouch}
+                onConfirmRef={(openConfirm) => {
+                  confirmOpenersRef.current.set(project.id, openConfirm);
+                }}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-lg bg-neutral-800 flex items-center justify-center">
-                    <span className="text-lg font-medium text-neutral-400">
-                      {project.title.charAt(0).toUpperCase()}
-                    </span>
+                <div
+                  data-swipe-row
+                  onClick={() => router.push(`/project/${project.id}`)}
+                  className="
+                    group flex items-center justify-between
+                    px-5 py-4 bg-neutral-900 border border-neutral-800
+                    rounded-lg cursor-pointer
+                    hover:border-neutral-700 hover:bg-neutral-850
+                    transition-all
+                  "
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-neutral-800 flex items-center justify-center">
+                      <span className="text-lg font-medium text-neutral-400">
+                        {project.title.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-white">{project.title}</h3>
+                      <p className="text-sm text-neutral-500">
+                        {project.tabs.length} tab{project.tabs.length !== 1 ? "s" : ""}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-medium text-white">{project.title}</h3>
-                    <p className="text-sm text-neutral-500">
-                      {project.tabs.length} tab{project.tabs.length !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={(e) => handleDeleteProject(project.id, e)}
-                    className="
-                      p-2 rounded-lg text-neutral-600
-                      hover:text-red-400 hover:bg-neutral-800
-                      opacity-0 group-hover:opacity-100
-                      transition-all
-                    "
-                    aria-label="Delete project"
-                  >
+                  <div className="flex items-center gap-2">
+                    {/* Desktop trash icon - only shown on non-touch devices */}
+                    {!isTouch && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Open the confirm modal via SwipeRevealRow
+                          const openConfirm = confirmOpenersRef.current.get(project.id);
+                          if (openConfirm) openConfirm();
+                        }}
+                        className="
+                          p-2 rounded-lg text-neutral-600
+                          hover:text-red-400 hover:bg-neutral-800
+                          opacity-0 group-hover:opacity-100
+                          transition-all
+                        "
+                        aria-label="Delete project"
+                      >
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M2 4H14M5.333 4V2.667C5.333 2.298 5.632 2 6 2H10C10.368 2 10.667 2.298 10.667 2.667V4M12.667 4V13.333C12.667 13.702 12.368 14 12 14H4C3.632 14 3.333 13.702 3.333 13.333V4" />
+                        </svg>
+                      </button>
+                    )}
                     <svg
                       width="16"
                       height="16"
@@ -236,23 +309,13 @@ export default function HomePage() {
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="1.5"
+                      className="text-neutral-600 group-hover:text-neutral-400 transition-colors"
                     >
-                      <path d="M2 4H14M5.333 4V2.667C5.333 2.298 5.632 2 6 2H10C10.368 2 10.667 2.298 10.667 2.667V4M12.667 4V13.333C12.667 13.702 12.368 14 12 14H4C3.632 14 3.333 13.702 3.333 13.333V4" />
+                      <path d="M6 12L10 8L6 4" />
                     </svg>
-                  </button>
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    className="text-neutral-600 group-hover:text-neutral-400 transition-colors"
-                  >
-                    <path d="M6 12L10 8L6 4" />
-                  </svg>
+                  </div>
                 </div>
-              </div>
+              </SwipeRevealRow>
             ))
           )}
         </div>

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_CONTENT_LENGTH, ChecklistItem } from "@/lib/types";
 import { generateId } from "@/lib/localStorage";
+import SwipeRevealRow from "@/components/SwipeRevealRow";
 
 // Free tier limit for checklist items per tab
 const MAX_FREE_CHECKLIST_ITEMS = 5;
@@ -33,18 +34,68 @@ export default function Editor({
   const isChecklistChanged = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const newItemRef = useRef<HTMLInputElement>(null);
+  
+  // Swipe management state for checklist
+  const [closeAllSignal, setCloseAllSignal] = useState(0);
+  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   // Check if checklist has reached the free limit
   const isAtChecklistLimit = localChecklist.length >= MAX_FREE_CHECKLIST_ITEMS;
 
-  // Auto-resize textarea to fit content
-  const autoResize = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${textarea.scrollHeight}px`;
+  // Close all swipe rows when tapping outside
+  const handleChecklistContainerClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-checklist-row]') === null) {
+      if (openRowId) {
+        setCloseAllSignal((s) => s + 1);
+        setOpenRowId(null);
+      }
     }
-  }, []);
+  };
+
+  // Handler for when a row requests to close others
+  const handleRequestCloseOthers = (id: string) => {
+    if (openRowId !== id) {
+      setCloseAllSignal((s) => s + 1);
+      setOpenRowId(id);
+    }
+  };
+
+  /**
+   * Gentle caret-follow scrolling for NOTE mode.
+   * Scrolls textarea just enough to keep caret visible with ~2 lines of padding below.
+   * Only adjusts textarea.scrollTop, never window/body scroll (prevents jump bug).
+   */
+  const scrollCaretIntoView = () => {
+    const textarea = textareaRef.current;
+    if (!textarea || mode !== "note") return;
+
+    // Get line height from computed style, fallback to 28px
+    const computedLineHeight = parseInt(getComputedStyle(textarea).lineHeight);
+    const lineHeight = isNaN(computedLineHeight) ? 28 : computedLineHeight;
+    
+    // Calculate caret Y position based on line number
+    const caretPos = textarea.selectionStart;
+    const textBeforeCaret = textarea.value.substring(0, caretPos);
+    const lineNumber = textBeforeCaret.split('\n').length;
+    const caretY = (lineNumber - 1) * lineHeight;
+
+    // Calculate visible area
+    const visibleTop = textarea.scrollTop;
+    const visibleBottom = textarea.scrollTop + textarea.clientHeight;
+    
+    // Buffer: keep 2 lines of padding below caret
+    const buffer = lineHeight * 2;
+
+    // Only scroll if caret would be out of view
+    if (caretY + buffer > visibleBottom) {
+      // Caret is below visible area - scroll down
+      textarea.scrollTop = caretY + buffer - textarea.clientHeight;
+    } else if (caretY < visibleTop) {
+      // Caret is above visible area - scroll up
+      textarea.scrollTop = caretY;
+    }
+    // Otherwise do nothing - caret is already visible
+  };
 
   // Sync with prop changes (when switching tabs)
   useEffect(() => {
@@ -58,10 +109,18 @@ export default function Editor({
     setLocalChecklist(checklist);
   }, [checklist]);
 
-  // Auto-resize when content changes
+  // Caret-follow scrolling: keep caret visible when typing in NOTE mode
   useEffect(() => {
-    autoResize();
-  }, [localContent, autoResize]);
+    // Only run when user is actively typing in NOTE mode
+    if (mode !== "note" || !isUserTyping.current) return;
+
+    // Use requestAnimationFrame to run after React updates the DOM
+    const rafId = requestAnimationFrame(() => {
+      scrollCaretIntoView();
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [localContent, mode]);
 
   // Debounced save for note content - triggers 800ms after user stops typing
   useEffect(() => {
@@ -164,14 +223,6 @@ export default function Editor({
 
         isUserTyping.current = true;
         setLocalContent(newValue);
-
-        // Set cursor position at the line start (which is now empty)
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.selectionStart = lineStart;
-            textareaRef.current.selectionEnd = lineStart;
-          }
-        }, 0);
       } else {
         // Has content after bullet - insert new bullet line
         e.preventDefault();
@@ -183,15 +234,6 @@ export default function Editor({
         if (newValue.length <= MAX_CONTENT_LENGTH) {
           isUserTyping.current = true;
           setLocalContent(newValue);
-
-          // Set cursor position after the new bullet
-          setTimeout(() => {
-            if (textareaRef.current) {
-              const newCursorPos = selectionEnd + newLine.length;
-              textareaRef.current.selectionStart = newCursorPos;
-              textareaRef.current.selectionEnd = newCursorPos;
-            }
-          }, 0);
         }
       }
     } else if (numberedMatch) {
@@ -209,14 +251,6 @@ export default function Editor({
 
         isUserTyping.current = true;
         setLocalContent(newValue);
-
-        // Set cursor position at the line start (which is now empty)
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.selectionStart = lineStart;
-            textareaRef.current.selectionEnd = lineStart;
-          }
-        }, 0);
       } else {
         // Has content after bullet - insert new numbered line with incremented number
         e.preventDefault();
@@ -229,15 +263,6 @@ export default function Editor({
         if (newValue.length <= MAX_CONTENT_LENGTH) {
           isUserTyping.current = true;
           setLocalContent(newValue);
-
-          // Set cursor position after the new bullet
-          setTimeout(() => {
-            if (textareaRef.current) {
-              const newCursorPos = selectionEnd + newLine.length;
-              textareaRef.current.selectionStart = newCursorPos;
-              textareaRef.current.selectionEnd = newCursorPos;
-            }
-          }, 0);
         }
       }
     }
@@ -337,27 +362,31 @@ export default function Editor({
         </div>
       </div>
 
-      {/* Note Mode */}
+      {/* Note Mode - Fixed height container, textarea scrolls internally */}
       {mode === "note" && (
         <>
-          <div className="flex-1 p-6 overflow-y-auto">
-            <div className="min-h-[60vh]">
-              <textarea
-                ref={textareaRef}
-                value={localContent}
-                onChange={handleContentChange}
-                onKeyDown={handleTextareaKeyDown}
-                placeholder="Start writing..."
-                className="
-                  w-full min-h-[60vh] resize-none bg-transparent
-                  text-white text-lg leading-relaxed
-                  placeholder:text-neutral-600
-                  outline-none focus:outline-none focus:ring-0
-                  font-light tracking-wide
-                "
-                spellCheck={false}
-              />
-            </div>
+          <div className="flex-1 p-6 overflow-hidden">
+            {/* 
+              SCROLL JUMP FIX: Single scroll container (textarea only).
+              The outer div is overflow-hidden, textarea fills it and scrolls internally.
+              This prevents nested scroll containers that caused page jumping.
+            */}
+            <textarea
+              ref={textareaRef}
+              value={localContent}
+              onChange={handleContentChange}
+              onKeyDown={handleTextareaKeyDown}
+              placeholder="Start writing..."
+              className="
+                w-full h-full resize-none bg-transparent
+                text-white text-lg leading-relaxed
+                placeholder:text-neutral-600
+                outline-none focus:outline-none focus:ring-0
+                font-light tracking-wide
+                overflow-y-auto
+              "
+              spellCheck={false}
+            />
           </div>
 
           <div className="flex items-center justify-between px-6 py-3 border-t border-neutral-800">
@@ -407,7 +436,7 @@ export default function Editor({
       {/* Checklist Mode */}
       {mode === "checklist" && (
         <>
-          <div className="flex-1 p-6 overflow-y-auto">
+          <div className="flex-1 p-6 overflow-y-auto" onClick={handleChecklistContainerClick}>
             <div className="max-w-2xl mx-auto">
               {localChecklist.length === 0 ? (
                 <div className="text-center py-12">
@@ -422,67 +451,77 @@ export default function Editor({
               ) : (
                 <div className="space-y-1">
                   {localChecklist.map((item, index) => (
-                    <div
+                    <SwipeRevealRow
                       key={item.id}
-                      className="group flex items-center gap-3 py-2.5 px-3 bg-neutral-800/50 rounded-lg hover:bg-neutral-800 transition-colors"
+                      id={item.id}
+                      onDelete={() => handleDeleteItem(item.id)}
+                      closeAllSignal={closeAllSignal}
+                      onRequestCloseOthers={handleRequestCloseOthers}
+                      confirmTitle="Delete item?"
+                      confirmBody="This checklist item will be removed."
                     >
-                      {/* Checkbox */}
-                      <button
-                        onClick={() => handleToggleItem(item.id)}
-                        className={`w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-800 ${
-                          item.done
-                            ? "bg-white border-white"
-                            : "border-neutral-500 hover:border-neutral-400"
-                        }`}
+                      <div
+                        data-checklist-row
+                        className="group flex items-center gap-3 py-2.5 px-3 bg-neutral-800/50 rounded-lg hover:bg-neutral-800 transition-colors"
                       >
-                        {item.done && (
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 12 12"
-                            fill="none"
-                            stroke="black"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M2 6L5 9L10 3" />
-                          </svg>
-                        )}
-                      </button>
-
-                      {/* Text Input */}
-                      <input
-                        ref={index === localChecklist.length - 1 ? newItemRef : null}
-                        data-item-index={index}
-                        type="text"
-                        value={item.text}
-                        onChange={(e) => handleUpdateItemText(item.id, e.target.value)}
-                        onKeyDown={(e) => handleKeyDown(e, item.id, index)}
-                        placeholder="Enter item..."
-                        className={`flex-1 bg-transparent text-white outline-none placeholder:text-neutral-600 focus:outline-none ${
-                          item.done ? "line-through text-neutral-400" : ""
-                        }`}
-                      />
-
-                      {/* Delete Button */}
-                      <button
-                        onClick={() => handleDeleteItem(item.id)}
-                        className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-700 opacity-0 group-hover:opacity-100 transition-all"
-                        aria-label="Delete item"
-                      >
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 14 14"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.5"
+                        {/* Checkbox */}
+                        <button
+                          onClick={() => handleToggleItem(item.id)}
+                          className={`w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-800 ${
+                            item.done
+                              ? "bg-white border-white"
+                              : "border-neutral-500 hover:border-neutral-400"
+                          }`}
                         >
-                          <path d="M3 3L11 11M11 3L3 11" />
-                        </svg>
-                      </button>
-                    </div>
+                          {item.done && (
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 12 12"
+                              fill="none"
+                              stroke="black"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M2 6L5 9L10 3" />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Text Input */}
+                        <input
+                          ref={index === localChecklist.length - 1 ? newItemRef : null}
+                          data-item-index={index}
+                          type="text"
+                          value={item.text}
+                          onChange={(e) => handleUpdateItemText(item.id, e.target.value)}
+                          onKeyDown={(e) => handleKeyDown(e, item.id, index)}
+                          placeholder="Enter item..."
+                          className={`flex-1 bg-transparent text-white outline-none placeholder:text-neutral-600 focus:outline-none ${
+                            item.done ? "line-through text-neutral-400" : ""
+                          }`}
+                        />
+
+                        {/* Desktop Delete Button (hover) */}
+                        <button
+                          onClick={() => handleDeleteItem(item.id)}
+                          className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-700 opacity-0 group-hover:opacity-100 transition-all hidden md:flex"
+                          aria-label="Delete item"
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 14 14"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                          >
+                            <path d="M3 3L11 11M11 3L3 11" />
+                          </svg>
+                        </button>
+                      </div>
+                    </SwipeRevealRow>
                   ))}
                 </div>
               )}

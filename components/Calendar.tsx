@@ -1,22 +1,30 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import SwipeRevealRow from "@/components/SwipeRevealRow";
 import {
-  getEvents,
   getEventsForMonth,
-  getEventsForDate,
   createEvent,
+  updateEvent,
   deleteEvent,
   canCreateEvent,
-  getYearMonth,
   countEventsInMonth,
   getProjects,
 } from "@/lib/localStorage";
 import { CalendarEvent, Project, MAX_EVENTS_PER_MONTH } from "@/lib/types";
 
-interface CalendarProps {
-  projectId?: string; // If provided, shows only events for this project
-}
+// Predefined colors for event color picker
+const EVENT_COLORS = [
+  { name: "Red", value: "#ef4444" },
+  { name: "Blue", value: "#3b82f6" },
+  { name: "Green", value: "#22c55e" },
+  { name: "Yellow", value: "#eab308" },
+  { name: "Pink", value: "#ec4899" },
+  { name: "Purple", value: "#a855f7" },
+  { name: "Orange", value: "#f97316" },
+  { name: "Black", value: "#171717" },
+  { name: "White", value: "#fafafa" },
+];
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -40,26 +48,62 @@ function formatDateString(year: number, month: number, day: number): string {
   return `${year}-${m}-${d}`;
 }
 
-export default function Calendar({ projectId }: CalendarProps) {
+export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
 
-  // Event form state
+  // New event form state
+  const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [newEventTitle, setNewEventTitle] = useState("");
   const [newEventDescription, setNewEventDescription] = useState("");
   const [newEventProjectId, setNewEventProjectId] = useState<string>("");
+  const [newEventColor, setNewEventColor] = useState<string>("");
+  const newEventTitleRef = useRef<HTMLInputElement>(null);
+
+  // Edit event state
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editProjectId, setEditProjectId] = useState<string>("");
+  const [editColor, setEditColor] = useState<string>("");
+
+  // Delete confirmation state
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Swipe management state for event rows
+  const [eventCloseAllSignal, setEventCloseAllSignal] = useState(0);
+  const [openEventRowId, setOpenEventRowId] = useState<string | null>(null);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
   const yearMonth = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
 
-  // Load events and projects
+  // Close all swipe rows when tapping outside
+  const handleEventsContainerClick = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-event-row]') === null) {
+      if (openEventRowId) {
+        setEventCloseAllSignal((s) => s + 1);
+        setOpenEventRowId(null);
+      }
+    }
+  };
+
+  // Handler for when a row requests to close others
+  const handleEventRequestCloseOthers = (id: string) => {
+    if (openEventRowId !== id) {
+      setEventCloseAllSignal((s) => s + 1);
+      setOpenEventRowId(id);
+    }
+  };
+
+  // Load all events for the month (global calendar - no project filtering)
   const refreshEvents = useCallback(() => {
-    const monthEvents = getEventsForMonth(yearMonth, projectId);
+    const monthEvents = getEventsForMonth(yearMonth);
     setEvents(monthEvents);
-  }, [yearMonth, projectId]);
+  }, [yearMonth]);
 
   useEffect(() => {
     refreshEvents();
@@ -114,26 +158,98 @@ export default function Calendar({ projectId }: CalendarProps) {
   const handleCreateEvent = () => {
     if (!selectedDate || !newEventTitle.trim()) return;
 
-    const eventProjectId = projectId || (newEventProjectId || undefined);
     const result = createEvent(
       newEventTitle.trim(),
       selectedDate,
       newEventDescription.trim() || undefined,
-      eventProjectId
+      newEventProjectId || undefined,
+      newEventColor || undefined
     );
 
     if (result) {
       setNewEventTitle("");
       setNewEventDescription("");
       setNewEventProjectId("");
+      setNewEventColor("");
+      setIsAddingEvent(false);
       refreshEvents();
     }
   };
 
-  // Handle delete event
-  const handleDeleteEvent = (eventId: string) => {
-    deleteEvent(eventId);
+  // Handle cancel new event
+  const handleCancelNewEvent = () => {
+    setNewEventTitle("");
+    setNewEventDescription("");
+    setNewEventProjectId("");
+    setNewEventColor("");
+    setIsAddingEvent(false);
+  };
+
+  // Handle start adding event
+  const handleStartAddEvent = () => {
+    setIsAddingEvent(true);
+    // Autofocus title input after state update
+    setTimeout(() => {
+      newEventTitleRef.current?.focus();
+    }, 0);
+  };
+
+  // Handle start editing
+  const handleStartEdit = (event: CalendarEvent) => {
+    setEditingEvent(event);
+    setEditTitle(event.title);
+    setEditDescription(event.description || "");
+    setEditDate(event.date);
+    setEditProjectId(event.projectId || "");
+    setEditColor(event.color || "");
+  };
+
+  // Handle cancel edit
+  const handleCancelEdit = () => {
+    setEditingEvent(null);
+    setEditTitle("");
+    setEditDescription("");
+    setEditDate("");
+    setEditProjectId("");
+    setEditColor("");
+  };
+
+  // Handle save edit
+  const handleSaveEdit = () => {
+    if (!editingEvent || !editTitle.trim() || !editDate) return;
+
+    updateEvent(editingEvent.id, {
+      title: editTitle.trim(),
+      description: editDescription.trim() || undefined,
+      date: editDate,
+      projectId: editProjectId || undefined,
+      color: editColor || undefined,
+    });
+
+    handleCancelEdit();
     refreshEvents();
+  };
+
+  // Handle delete event with confirmation
+  const handleDeleteEvent = (eventId: string) => {
+    setDeleteConfirmId(eventId);
+  };
+
+  // Confirm delete
+  const confirmDelete = () => {
+    if (deleteConfirmId) {
+      deleteEvent(deleteConfirmId);
+      setDeleteConfirmId(null);
+      if (editingEvent?.id === deleteConfirmId) {
+        handleCancelEdit();
+      }
+      refreshEvents();
+    }
+  };
+
+  // Cancel delete
+  const cancelDelete = () => {
+    setDeleteConfirmId(null);
   };
 
   // Get project name by id
@@ -294,72 +410,131 @@ export default function Calendar({ projectId }: CalendarProps) {
 
           {/* Events List */}
           {selectedDateEvents.length > 0 && (
-            <div className="space-y-2 mb-4">
+            <div className="space-y-2 mb-4" onClick={handleEventsContainerClick}>
               {selectedDateEvents.map((event) => (
-                <div
+                <SwipeRevealRow
                   key={event.id}
-                  className="flex items-start justify-between p-3 bg-neutral-800 rounded-lg"
+                  id={event.id}
+                  onDelete={() => {
+                    deleteEvent(event.id);
+                    if (editingEvent?.id === event.id) {
+                      handleCancelEdit();
+                    }
+                    refreshEvents();
+                  }}
+                  closeAllSignal={eventCloseAllSignal}
+                  onRequestCloseOthers={handleEventRequestCloseOthers}
+                  confirmTitle="Delete event?"
+                  confirmBody="This calendar event will be removed."
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-neutral-100 truncate">
-                      {event.title}
-                    </p>
-                    {event.description && (
-                      <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
-                        {event.description}
-                      </p>
-                    )}
-                    {event.projectId && !projectId && (
-                      <p className="text-xs text-blue-400 mt-1">
-                        {getProjectName(event.projectId)}
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleDeleteEvent(event.id)}
-                    className="p-1.5 rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-700 transition-all ml-2 flex-shrink-0"
-                    aria-label="Delete event"
+                  <div
+                    data-event-row
+                    className="flex items-start gap-3 p-3 bg-neutral-800 rounded-lg"
                   >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <path d="M2 4H14M5.333 4V2.667C5.333 2.298 5.632 2 6 2H10C10.368 2 10.667 2.298 10.667 2.667V4M12.667 4V13.333C12.667 13.702 12.368 14 12 14H4C3.632 14 3.333 13.702 3.333 13.333V4" />
-                    </svg>
-                  </button>
-                </div>
+                    {/* Color indicator */}
+                    {event.color && (
+                      <div
+                        className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                          event.color === "#fafafa" || event.color === "#171717" 
+                            ? "border border-neutral-500" 
+                            : ""
+                        }`}
+                        style={{ backgroundColor: event.color }}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-neutral-100 truncate">
+                        {event.title}
+                      </p>
+                      {event.description && (
+                        <p className="text-xs text-neutral-400 mt-1 line-clamp-2">
+                          {event.description}
+                        </p>
+                      )}
+                      {event.projectId && (
+                        <p className="text-xs text-blue-400 mt-1">
+                          {getProjectName(event.projectId)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      {/* Edit button */}
+                      <button
+                        onClick={() => handleStartEdit(event)}
+                        className="p-1.5 rounded text-neutral-500 hover:text-white hover:bg-neutral-700 transition-all"
+                        aria-label="Edit event"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M11.333 2A1.886 1.886 0 0 1 14 4.667L5.333 13.333H2v-3.333L10.667 2h.666z" />
+                        </svg>
+                      </button>
+                      {/* Desktop Delete button (hover only) */}
+                      <button
+                        onClick={() => handleDeleteEvent(event.id)}
+                        className="p-1.5 rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-700 transition-all hidden md:block"
+                        aria-label="Delete event"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M2 4H14M5.333 4V2.667C5.333 2.298 5.632 2 6 2H10C10.368 2 10.667 2.298 10.667 2.667V4M12.667 4V13.333C12.667 13.702 12.368 14 12 14H4C3.632 14 3.333 13.702 3.333 13.333V4" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </SwipeRevealRow>
               ))}
             </div>
           )}
 
-          {/* Create Event Form */}
-          <div className="space-y-3">
-            <div className="text-xs font-medium text-neutral-400 uppercase tracking-wide">
-              New Event
-            </div>
-
-            {!canCreateForSelectedDate ? (
-              <div className="p-3 bg-neutral-800 border border-neutral-700 rounded-lg">
-                <p className="text-sm text-amber-400">
-                  You&apos;ve reached the free limit of {MAX_EVENTS_PER_MONTH} events for this month.
-                </p>
-                <button className="text-white text-sm hover:text-gray-300 font-medium mt-2 transition-colors">
-                  Upgrade to add more →
+          {/* Delete Confirmation Dialog (for desktop hover delete button) */}
+          {deleteConfirmId && (
+            <div className="mb-4 p-3 bg-red-950/50 border border-red-800 rounded-lg">
+              <p className="text-sm text-red-200 mb-3">Delete this event?</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmDelete}
+                  className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={cancelDelete}
+                  className="px-3 py-1.5 bg-neutral-700 text-neutral-300 text-sm rounded-lg hover:bg-neutral-600 transition-colors"
+                >
+                  Cancel
                 </button>
               </div>
-            ) : (
-              <>
+            </div>
+          )}
+
+          {/* Edit Event Modal */}
+          {editingEvent && (
+            <div className="mb-4 p-4 bg-neutral-800 border border-neutral-600 rounded-lg">
+              <div className="text-xs font-medium text-neutral-400 uppercase tracking-wide mb-3">
+                Edit Event
+              </div>
+              
+              <div className="space-y-3">
                 <input
                   type="text"
-                  value={newEventTitle}
-                  onChange={(e) => setNewEventTitle(e.target.value)}
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
                   placeholder="Event title..."
                   className="
-                    w-full px-3 py-2 bg-neutral-800 border border-neutral-700
+                    w-full px-3 py-2 bg-neutral-700 border border-neutral-600
                     rounded-lg text-sm text-white placeholder:text-neutral-500
                     focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
                     transition-colors
@@ -368,12 +543,12 @@ export default function Calendar({ projectId }: CalendarProps) {
                 />
 
                 <textarea
-                  value={newEventDescription}
-                  onChange={(e) => setNewEventDescription(e.target.value)}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
                   placeholder="Description (optional)..."
                   rows={2}
                   className="
-                    w-full px-3 py-2 bg-neutral-800 border border-neutral-700
+                    w-full px-3 py-2 bg-neutral-700 border border-neutral-600
                     rounded-lg text-sm text-white placeholder:text-neutral-500
                     focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
                     transition-colors resize-none
@@ -381,31 +556,86 @@ export default function Calendar({ projectId }: CalendarProps) {
                   maxLength={500}
                 />
 
-                {/* Project selector - only show in global calendar */}
-                {!projectId && (
-                  <select
-                    value={newEventProjectId}
-                    onChange={(e) => setNewEventProjectId(e.target.value)}
-                    className="
-                      w-full px-3 py-2 bg-neutral-800 border border-neutral-700
-                      rounded-lg text-sm text-white
-                      focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
-                      transition-colors
-                    "
-                  >
-                    <option value="">No project</option>
-                    {projects.map((project) => (
-                      <option key={project.id} value={project.id}>
-                        {project.title}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                {/* Date picker */}
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="
+                    w-full px-3 py-2 bg-neutral-700 border border-neutral-600
+                    rounded-lg text-sm text-white
+                    focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
+                    transition-colors
+                  "
+                />
+
+                {/* Project selector */}
+                <select
+                  value={editProjectId}
+                  onChange={(e) => setEditProjectId(e.target.value)}
+                  className="
+                    w-full px-3 py-2 bg-neutral-700 border border-neutral-600
+                    rounded-lg text-sm text-white
+                    focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
+                    transition-colors
+                  "
+                >
+                  <option value="">No project</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.title}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Color picker */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-neutral-500">Color:</span>
+                  <div className="flex gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setEditColor("")}
+                      className={`
+                        w-5 h-5 rounded-full border-2 transition-all
+                        ${editColor === "" 
+                          ? "border-white ring-2 ring-white/30" 
+                          : "border-neutral-600 hover:border-neutral-400"
+                        }
+                        bg-neutral-700
+                      `}
+                      title="No color"
+                    />
+                    {EVENT_COLORS.map((color) => {
+                      const isSelected = editColor === color.value;
+                      const needsBorder = color.value === "#171717" || color.value === "#fafafa";
+                      return (
+                        <button
+                          key={color.value}
+                          type="button"
+                          onClick={() => setEditColor(color.value)}
+                          className={`
+                            w-5 h-5 rounded-full border transition-all
+                            ${isSelected 
+                              ? "ring-2 ring-white/50 scale-110" 
+                              : "hover:scale-110"
+                            }
+                            ${needsBorder 
+                              ? "border-neutral-500" 
+                              : "border-transparent"
+                            }
+                          `}
+                          style={{ backgroundColor: color.value }}
+                          title={color.name}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
 
                 <div className="flex gap-2">
                   <button
-                    onClick={handleCreateEvent}
-                    disabled={!newEventTitle.trim()}
+                    onClick={handleSaveEdit}
+                    disabled={!editTitle.trim() || !editDate}
                     className="
                       flex-1 px-4 py-2 bg-white text-black rounded-lg
                       text-sm font-medium
@@ -413,31 +643,194 @@ export default function Calendar({ projectId }: CalendarProps) {
                       disabled:opacity-50 disabled:cursor-not-allowed
                     "
                   >
-                    Save Event
+                    Save Changes
                   </button>
                   <button
-                    onClick={() => {
-                      setNewEventTitle("");
-                      setNewEventDescription("");
-                      setNewEventProjectId("");
-                      setSelectedDate(null);
-                    }}
+                    onClick={handleCancelEdit}
                     className="
-                      px-4 py-2 bg-neutral-800 text-neutral-300 rounded-lg
+                      px-4 py-2 bg-neutral-700 text-neutral-300 rounded-lg
                       text-sm font-medium
-                      hover:bg-neutral-700 transition-colors
+                      hover:bg-neutral-600 transition-colors
                     "
                   >
                     Cancel
                   </button>
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
+
+          {/* Create Event Section */}
+          {!isAddingEvent ? (
+            /* Show "+ New event" button when form is hidden */
+            <button
+              onClick={handleStartAddEvent}
+              disabled={!canCreateForSelectedDate}
+              className={`
+                w-full px-4 py-2.5 rounded-lg text-sm font-medium
+                flex items-center justify-center gap-2 transition-colors
+                ${canCreateForSelectedDate
+                  ? "bg-neutral-800 text-neutral-300 hover:bg-neutral-700 hover:text-white"
+                  : "bg-neutral-800/50 text-neutral-500 cursor-not-allowed"
+                }
+              `}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <path d="M7 1V13M1 7H13" />
+              </svg>
+              {canCreateForSelectedDate ? "New event" : `Limit reached (${MAX_EVENTS_PER_MONTH}/month)`}
+            </button>
+          ) : (
+            /* Show form when adding event */
+            <div 
+              className="space-y-3"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  handleCancelNewEvent();
+                }
+              }}
+            >
+              <div className="text-xs font-medium text-neutral-400 uppercase tracking-wide">
+                New Event
+              </div>
+
+              <input
+                ref={newEventTitleRef}
+                type="text"
+                value={newEventTitle}
+                onChange={(e) => setNewEventTitle(e.target.value)}
+                placeholder="Event title..."
+                className="
+                  w-full px-3 py-2 bg-neutral-800 border border-neutral-700
+                  rounded-lg text-sm text-white placeholder:text-neutral-500
+                  focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
+                  transition-colors
+                "
+                maxLength={100}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newEventTitle.trim()) {
+                    handleCreateEvent();
+                  }
+                }}
+              />
+
+              <textarea
+                value={newEventDescription}
+                onChange={(e) => setNewEventDescription(e.target.value)}
+                placeholder="Description (optional)..."
+                rows={2}
+                className="
+                  w-full px-3 py-2 bg-neutral-800 border border-neutral-700
+                  rounded-lg text-sm text-white placeholder:text-neutral-500
+                  focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
+                  transition-colors resize-none
+                "
+                maxLength={500}
+              />
+
+              {/* Project selector */}
+              <select
+                value={newEventProjectId}
+                onChange={(e) => setNewEventProjectId(e.target.value)}
+                className="
+                  w-full px-3 py-2 bg-neutral-800 border border-neutral-700
+                  rounded-lg text-sm text-white
+                  focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500/50
+                  transition-colors
+                "
+              >
+                <option value="">No project</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.title}
+                  </option>
+                ))}
+              </select>
+
+              {/* Color picker */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-neutral-500">Color:</span>
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setNewEventColor("")}
+                    className={`
+                      w-5 h-5 rounded-full border-2 transition-all
+                      ${newEventColor === "" 
+                        ? "border-white ring-2 ring-white/30" 
+                        : "border-neutral-600 hover:border-neutral-400"
+                      }
+                      bg-neutral-700
+                    `}
+                    title="No color"
+                  />
+                  {EVENT_COLORS.map((color) => {
+                    const isSelected = newEventColor === color.value;
+                    const needsBorder = color.value === "#171717" || color.value === "#fafafa";
+                    return (
+                      <button
+                        key={color.value}
+                        type="button"
+                        onClick={() => setNewEventColor(color.value)}
+                        className={`
+                          w-5 h-5 rounded-full border transition-all
+                          ${isSelected 
+                            ? "ring-2 ring-white/50 scale-110" 
+                            : "hover:scale-110"
+                          }
+                          ${needsBorder 
+                            ? "border-neutral-500" 
+                            : "border-transparent"
+                          }
+                        `}
+                        style={{ backgroundColor: color.value }}
+                        title={color.name}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCreateEvent}
+                  disabled={!newEventTitle.trim()}
+                  className="
+                    flex-1 px-4 py-2 bg-white text-black rounded-lg
+                    text-sm font-medium
+                    hover:bg-neutral-200 transition-colors
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                  "
+                >
+                  Save Event
+                </button>
+                <button
+                  onClick={handleCancelNewEvent}
+                  className="
+                    px-4 py-2 bg-neutral-800 text-neutral-300 rounded-lg
+                    text-sm font-medium
+                    hover:bg-neutral-700 transition-colors
+                  "
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+
+
 
 

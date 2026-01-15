@@ -13,7 +13,6 @@ import {
 import { Project, Tab as TabType, ChecklistItem, MAX_TABS } from "@/lib/types";
 import TabBar from "@/components/TabBar";
 import Editor from "@/components/Editor";
-import Calendar from "@/components/Calendar";
 
 export default function ProjectPage() {
   const router = useRouter();
@@ -25,7 +24,6 @@ export default function ProjectPage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
-  const [showCalendar, setShowCalendar] = useState(false);
 
   // Load project
   useEffect(() => {
@@ -37,6 +35,16 @@ export default function ProjectPage() {
     }
     setIsLoaded(true);
   }, [projectId]);
+
+  // Lock page scroll while inside project editor to prevent scroll jumping in NOTE mode
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
 
   // Get active tab
   const activeTab = project?.tabs.find((t) => t.id === activeTabId);
@@ -193,7 +201,7 @@ export default function ProjectPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
+    <div className="h-screen flex flex-col bg-neutral-950 text-neutral-100 overflow-hidden">
       {/* Header */}
       <header className="flex items-center gap-4 px-4 py-3 border-b border-neutral-800 bg-neutral-950">
         <button
@@ -239,33 +247,7 @@ export default function ProjectPage() {
           </h1>
         )}
 
-        <div className="ml-auto flex items-center gap-3">
-          <button
-            onClick={() => setShowCalendar(!showCalendar)}
-            className={`
-              flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm
-              transition-all
-              ${showCalendar 
-                ? "bg-neutral-700 text-white" 
-                : "text-neutral-400 hover:text-white hover:bg-neutral-800"
-              }
-            `}
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-            Calendar
-          </button>
+        <div className="ml-auto">
           <span className="text-xs text-neutral-500">
             {project.tabs.length}/{MAX_TABS} tabs
           </span>
@@ -283,34 +265,21 @@ export default function ProjectPage() {
         onAddTab={handleAddTab}
       />
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-hidden flex">
-        {/* Editor */}
-        <div className={`flex-1 overflow-hidden ${showCalendar ? "border-r border-neutral-800" : ""}`}>
-          {activeTab ? (
-            <Editor
-              key={activeTabId}
-              content={activeTab.content}
-              mode={activeTab.mode}
-              checklist={activeTab.checklist || []}
-              onChange={handleContentChange}
-              onModeChange={handleModeChange}
-              onChecklistChange={handleChecklistChange}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-neutral-500">
-              No tab selected
-            </div>
-          )}
-        </div>
-
-        {/* Project Calendar Panel */}
-        {showCalendar && (
-          <div className="w-80 lg:w-96 overflow-y-auto bg-neutral-950 p-4">
-            <h3 className="text-sm font-medium text-neutral-400 uppercase tracking-wide mb-3">
-              Project Calendar
-            </h3>
-            <Calendar projectId={projectId} />
+      {/* Editor */}
+      <div className="flex-1 overflow-hidden">
+        {activeTab ? (
+          <Editor
+            key={activeTabId}
+            content={activeTab.content}
+            mode={activeTab.mode}
+            checklist={activeTab.checklist || []}
+            onChange={handleContentChange}
+            onModeChange={handleModeChange}
+            onChecklistChange={handleChecklistChange}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full text-neutral-500">
+            No tab selected
           </div>
         )}
       </div>

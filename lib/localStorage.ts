@@ -216,7 +216,8 @@ export function createEvent(
   title: string,
   date: string,
   description?: string,
-  projectId?: string
+  projectId?: string,
+  color?: string
 ): CalendarEvent | null {
   if (!canCreateEvent(date)) {
     return null;
@@ -230,12 +231,28 @@ export function createEvent(
     date,
     description,
     projectId,
+    color,
   };
   
   events.push(newEvent);
   saveEvents(events);
   
   return newEvent;
+}
+
+// Update an existing event
+export function updateEvent(
+  id: string,
+  updates: Partial<Omit<CalendarEvent, "id">>
+): CalendarEvent | null {
+  const events = getEvents();
+  const index = events.findIndex((e) => e.id === id);
+  if (index === -1) return null;
+  
+  const updatedEvent = { ...events[index], ...updates };
+  events[index] = updatedEvent;
+  saveEvents(events);
+  return updatedEvent;
 }
 
 // Delete an event

@@ -18,6 +18,18 @@ export interface Project {
   tabs: Tab[];
 }
 
+// Allowed event colors
+export type EventColor = 
+  | "#ef4444" // Red
+  | "#3b82f6" // Blue
+  | "#22c55e" // Green
+  | "#eab308" // Yellow
+  | "#ec4899" // Pink
+  | "#a855f7" // Purple
+  | "#f97316" // Orange
+  | "#171717" // Black
+  | "#fafafa"; // White
+
 // Calendar Event type
 export interface CalendarEvent {
   id: string;
@@ -25,6 +37,7 @@ export interface CalendarEvent {
   description?: string;
   date: string; // ISO date string, e.g. "2025-12-04"
   projectId?: string; // optional; if set, event belongs to a specific project
+  color?: EventColor; // optional; color label for the event
 }
 
 export const MAX_PROJECTS = 3;
