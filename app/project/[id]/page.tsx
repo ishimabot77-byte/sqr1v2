@@ -45,19 +45,15 @@ export default function ProjectPage() {
     setIsTouch(hasCoarsePointer || hasTouchPoints);
   }, [projectId]);
 
-  // Lock page scroll on desktop only to prevent scroll jumping in NOTE mode
-  // On mobile, we allow normal scroll behavior for better keyboard handling
+  // Lock body scroll to prevent any scroll jumping - the layout handles scrolling internally
   useEffect(() => {
-    // Skip scroll lock on touch devices
-    if (isTouch) return;
-    
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     return () => {
       document.body.style.overflow = originalOverflow;
     };
-  }, [isTouch]);
+  }, []);
 
   // Get active tab
   const activeTab = project?.tabs.find((t) => t.id === activeTabId);
@@ -216,9 +212,9 @@ export default function ProjectPage() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col bg-neutral-950 text-neutral-100 ${!isTouch ? 'h-screen overflow-hidden' : ''}`}>
-      {/* Header - sticky on mobile so it's always reachable */}
-      <header className="sticky top-0 z-50 flex items-center gap-4 px-4 py-3 border-b border-neutral-800 bg-neutral-950/95 backdrop-blur-sm">
+    <div className="h-dvh flex flex-col bg-neutral-950 text-neutral-100 overflow-hidden">
+      {/* Header - flex-shrink-0 ensures it doesn't collapse */}
+      <header className="flex-shrink-0 flex items-center gap-4 px-4 py-3 border-b border-neutral-800 bg-neutral-950">
         <button
           onClick={() => router.push("/")}
           className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-all"
@@ -270,8 +266,8 @@ export default function ProjectPage() {
         </div>
       </header>
 
-      {/* Tab Bar - also sticky below header on mobile */}
-      <div className="sticky top-[57px] z-40 bg-neutral-950">
+      {/* Tab Bar - flex-shrink-0 ensures it doesn't collapse */}
+      <div className="flex-shrink-0">
         <TabBar
           tabs={project.tabs}
           activeTabId={activeTabId}
@@ -283,8 +279,8 @@ export default function ProjectPage() {
         />
       </div>
 
-      {/* Editor */}
-      <div className={`flex-1 ${!isTouch ? 'overflow-hidden' : ''}`}>
+      {/* Editor - flex-1 fills remaining space, overflow-hidden contains it */}
+      <div className="flex-1 overflow-hidden">
         {activeTab ? (
           <Editor
             key={activeTabId}
