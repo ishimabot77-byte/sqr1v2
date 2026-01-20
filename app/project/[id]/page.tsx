@@ -11,7 +11,6 @@ import {
   canAddTab,
 } from "@/lib/localStorage";
 import { Project, Tab as TabType, ChecklistItem, MAX_TABS } from "@/lib/types";
-import { isTouchDevice } from "@/lib/mobileUtils";
 import TabBar from "@/components/TabBar";
 import Editor from "@/components/Editor";
 
@@ -25,11 +24,8 @@ export default function ProjectPage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
-  
-  // Touch device detection for mobile-specific behavior
-  const [isTouch, setIsTouch] = useState(false);
 
-  // Load project and detect touch capability
+  // Load project
   useEffect(() => {
     const loadedProject = getProject(projectId);
     if (loadedProject) {
@@ -38,9 +34,6 @@ export default function ProjectPage() {
       setTitleValue(loadedProject.title);
     }
     setIsLoaded(true);
-    
-    // Detect touch capability
-    setIsTouch(isTouchDevice());
   }, [projectId]);
 
   // Lock body scroll to prevent any scroll jumping - the layout handles scrolling internally
@@ -288,7 +281,6 @@ export default function ProjectPage() {
             onChange={handleContentChange}
             onModeChange={handleModeChange}
             onChecklistChange={handleChecklistChange}
-            isTouch={isTouch}
           />
         ) : (
           <div className="flex items-center justify-center h-full text-neutral-500">
