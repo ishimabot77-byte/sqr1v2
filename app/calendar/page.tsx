@@ -1,16 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import Calendar from "@/components/Calendar";
-import { resetMobileViewportZoom } from "@/lib/mobileUtils";
 
 export default function CalendarPage() {
-  // Reset viewport zoom on page mount (clears any zoom from previous page)
-  useEffect(() => {
-    resetMobileViewportZoom();
-  }, []);
-
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100">
       {/* Header */}

@@ -4,8 +4,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_CONTENT_LENGTH, ChecklistItem } from "@/lib/types";
 import { generateId } from "@/lib/localStorage";
-import { resetMobileViewportZoom } from "@/lib/mobileUtils";
-import SwipeRevealRow from "@/components/SwipeRevealRow";
 
 // Free tier limit for checklist items per tab
 const MAX_FREE_CHECKLIST_ITEMS = 5;
@@ -17,8 +15,6 @@ interface EditorProps {
   onChange: (content: string) => void;
   onModeChange: (mode: "note" | "checklist") => void;
   onChecklistChange: (checklist: ChecklistItem[]) => void;
-  /** Whether device has touch/coarse pointer (passed from parent for mobile-specific behavior) */
-  isTouch?: boolean;
 }
 
 export default function Editor({
@@ -28,7 +24,6 @@ export default function Editor({
   onChange,
   onModeChange,
   onChecklistChange,
-  isTouch = false,
 }: EditorProps) {
   const router = useRouter();
   const [localContent, setLocalContent] = useState(content);
@@ -38,99 +33,18 @@ export default function Editor({
   const isChecklistChanged = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const newItemRef = useRef<HTMLInputElement>(null);
-  const editorContainerRef = useRef<HTMLDivElement>(null);
-  
-  // Swipe management state for checklist
-  const [closeAllSignal, setCloseAllSignal] = useState(0);
-  const [openRowId, setOpenRowId] = useState<string | null>(null);
 
   // Check if checklist has reached the free limit
   const isAtChecklistLimit = localChecklist.length >= MAX_FREE_CHECKLIST_ITEMS;
 
-  /**
-   * Tap-outside handler for mobile: blur textarea when tapping outside it.
-   * This allows the keyboard to dismiss and makes the header accessible.
-   */
-  const handleTapOutside = useCallback((e: React.PointerEvent | React.TouchEvent) => {
-    // Only on touch devices
-    if (!isTouch) return;
-    
-    const target = e.target as HTMLElement;
-    
-    // If tapping on the textarea itself, don't blur
-    if (textareaRef.current && textareaRef.current.contains(target)) {
-      return;
-    }
-    
-    // If tapping on any input element (like checklist inputs), don't blur
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-      return;
-    }
-    
-    // If tapping on a button or interactive element, don't blur (let the button work)
-    if (target.closest('button') || target.closest('a') || target.closest('[role="button"]')) {
-      return;
-    }
-    
-    // Blur the textarea to dismiss keyboard and reset zoom
-    textareaRef.current?.blur();
-    resetMobileViewportZoom();
-  }, [isTouch]);
-
-  // Close all swipe rows when tapping outside
-  const handleChecklistContainerClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-checklist-row]') === null) {
-      if (openRowId) {
-        setCloseAllSignal((s) => s + 1);
-        setOpenRowId(null);
-      }
-    }
-  };
-
-  // Handler for when a row requests to close others
-  const handleRequestCloseOthers = (id: string) => {
-    if (openRowId !== id) {
-      setCloseAllSignal((s) => s + 1);
-      setOpenRowId(id);
-    }
-  };
-
-  /**
-   * Gentle caret-follow scrolling for NOTE mode.
-   * Scrolls textarea just enough to keep caret visible with ~2 lines of padding below.
-   * Only adjusts textarea.scrollTop, never window/body scroll (prevents jump bug).
-   */
-  const scrollCaretIntoView = useCallback(() => {
+  // Auto-resize textarea to fit content
+  const autoResize = useCallback(() => {
     const textarea = textareaRef.current;
-    if (!textarea || mode !== "note") return;
-
-    // Get line height from computed style, fallback to 28px
-    const computedLineHeight = parseInt(getComputedStyle(textarea).lineHeight);
-    const lineHeight = isNaN(computedLineHeight) ? 28 : computedLineHeight;
-    
-    // Calculate caret Y position based on line number
-    const caretPos = textarea.selectionStart;
-    const textBeforeCaret = textarea.value.substring(0, caretPos);
-    const lineNumber = textBeforeCaret.split('\n').length;
-    const caretY = (lineNumber - 1) * lineHeight;
-
-    // Calculate visible area
-    const visibleTop = textarea.scrollTop;
-    const visibleBottom = textarea.scrollTop + textarea.clientHeight;
-    
-    // Buffer: keep 2 lines of padding below caret
-    const buffer = lineHeight * 2;
-
-    // Only scroll if caret would be out of view
-    if (caretY + buffer > visibleBottom) {
-      // Caret is below visible area - scroll down
-      textarea.scrollTop = caretY + buffer - textarea.clientHeight;
-    } else if (caretY < visibleTop) {
-      // Caret is above visible area - scroll up
-      textarea.scrollTop = caretY;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
     }
-    // Otherwise do nothing - caret is already visible
-  }, [mode]);
+  }, []);
 
   // Sync with prop changes (when switching tabs)
   useEffect(() => {
@@ -144,18 +58,10 @@ export default function Editor({
     setLocalChecklist(checklist);
   }, [checklist]);
 
-  // Caret-follow scrolling: keep caret visible when typing in NOTE mode
+  // Auto-resize when content changes
   useEffect(() => {
-    // Only run when user is actively typing in NOTE mode
-    if (mode !== "note" || !isUserTyping.current) return;
-
-    // Use requestAnimationFrame to run after React updates the DOM
-    const rafId = requestAnimationFrame(() => {
-      scrollCaretIntoView();
-    });
-
-    return () => cancelAnimationFrame(rafId);
-  }, [localContent, mode, scrollCaretIntoView]);
+    autoResize();
+  }, [localContent, autoResize]);
 
   // Debounced save for note content - triggers 800ms after user stops typing
   useEffect(() => {
@@ -214,94 +120,6 @@ export default function Editor({
       isUserTyping.current = true;
       setLocalContent(value);
     }
-  };
-
-  // Smart list behavior for note editor
-  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Only handle Enter without Shift
-    if (e.key !== "Enter" || e.shiftKey) {
-      return;
-    }
-
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const { selectionStart, selectionEnd, value } = textarea;
-
-    // Find the current line boundaries
-    const beforeCursor = value.substring(0, selectionStart);
-    const afterCursor = value.substring(selectionEnd);
-
-    // Find the start of the current line (after the last newline before cursor)
-    const lineStart = beforeCursor.lastIndexOf("\n") + 1;
-    // Find the end of the current line (before the first newline after cursor, or end of text)
-    const lineEndRelative = afterCursor.indexOf("\n");
-    const lineEnd = lineEndRelative === -1 ? value.length : selectionEnd + lineEndRelative;
-
-    const currentLine = value.substring(lineStart, lineEnd);
-
-    // Check for dash bullet: /^\s*-\s/
-    const dashMatch = currentLine.match(/^(\s*-\s)/);
-    // Check for numbered bullet: /^\s*(\d+)\.\s/
-    const numberedMatch = currentLine.match(/^(\s*)(\d+)\.\s/);
-
-    if (dashMatch) {
-      const bulletPrefix = dashMatch[1]; // e.g., "  - "
-      const textAfterBullet = currentLine.substring(bulletPrefix.length);
-
-      if (textAfterBullet.trim() === "") {
-        // Empty bullet line - remove the bullet marker, leave empty line
-        e.preventDefault();
-
-        // Replace the current line content (bullet prefix) with empty string
-        const newValue = value.substring(0, lineStart) + value.substring(lineEnd);
-
-        isUserTyping.current = true;
-        setLocalContent(newValue);
-      } else {
-        // Has content after bullet - insert new bullet line
-        e.preventDefault();
-
-        const newLine = "\n" + bulletPrefix;
-        const newValue = value.substring(0, selectionEnd) + newLine + value.substring(selectionEnd);
-
-        // Only apply if within character limit
-        if (newValue.length <= MAX_CONTENT_LENGTH) {
-          isUserTyping.current = true;
-          setLocalContent(newValue);
-        }
-      }
-    } else if (numberedMatch) {
-      const indent = numberedMatch[1]; // leading spaces
-      const currentNumber = parseInt(numberedMatch[2], 10);
-      const fullPrefix = numberedMatch[0]; // e.g., "  1. "
-      const textAfterBullet = currentLine.substring(fullPrefix.length);
-
-      if (textAfterBullet.trim() === "") {
-        // Empty numbered line - remove the bullet marker, leave empty line
-        e.preventDefault();
-
-        // Replace the current line content (bullet prefix) with empty string
-        const newValue = value.substring(0, lineStart) + value.substring(lineEnd);
-
-        isUserTyping.current = true;
-        setLocalContent(newValue);
-      } else {
-        // Has content after bullet - insert new numbered line with incremented number
-        e.preventDefault();
-
-        const nextNumber = currentNumber + 1;
-        const newLine = "\n" + indent + nextNumber + ". ";
-        const newValue = value.substring(0, selectionEnd) + newLine + value.substring(selectionEnd);
-
-        // Only apply if within character limit
-        if (newValue.length <= MAX_CONTENT_LENGTH) {
-          isUserTyping.current = true;
-          setLocalContent(newValue);
-        }
-      }
-    }
-    // For non-list lines, let Enter behave normally (don't prevent default)
   };
 
   // Checklist handlers
@@ -370,11 +188,7 @@ export default function Editor({
   const isAtLimit = charCount >= MAX_CONTENT_LENGTH;
 
   return (
-    <div 
-      ref={editorContainerRef}
-      className="flex flex-col h-full bg-neutral-900"
-      onPointerDown={handleTapOutside}
-    >
+    <div className="flex flex-col h-full bg-neutral-900">
       {/* Mode Toggle */}
       <div className="flex items-center gap-2 px-6 py-3 border-b border-neutral-800">
         <div className="flex bg-neutral-800 rounded-lg p-0.5">
@@ -401,31 +215,26 @@ export default function Editor({
         </div>
       </div>
 
-      {/* Note Mode - Fixed height container, textarea scrolls internally */}
+      {/* Note Mode */}
       {mode === "note" && (
         <>
-          <div className="flex-1 p-6 overflow-hidden">
-            {/* 
-              SCROLL JUMP FIX: Single scroll container (textarea only).
-              The outer div is overflow-hidden, textarea fills it and scrolls internally.
-              This prevents nested scroll containers that caused page jumping.
-            */}
-            <textarea
-              ref={textareaRef}
-              value={localContent}
-              onChange={handleContentChange}
-              onKeyDown={handleTextareaKeyDown}
-              placeholder="Start writing..."
-              className="
-                w-full h-full resize-none bg-transparent
-                text-white text-lg leading-relaxed
-                placeholder:text-neutral-600
-                outline-none focus:outline-none focus:ring-0
-                font-light tracking-wide
-                overflow-y-auto
-              "
-              spellCheck={false}
-            />
+          <div className="flex-1 p-6 overflow-y-auto">
+            <div className="min-h-[60vh]">
+              <textarea
+                ref={textareaRef}
+                value={localContent}
+                onChange={handleContentChange}
+                placeholder="Start writing..."
+                className="
+                  w-full min-h-[60vh] resize-none bg-transparent
+                  text-white text-lg leading-relaxed
+                  placeholder:text-neutral-600
+                  outline-none focus:outline-none focus:ring-0
+                  font-light tracking-wide
+                "
+                spellCheck={false}
+              />
+            </div>
           </div>
 
           <div className="flex items-center justify-between px-6 py-3 border-t border-neutral-800">
@@ -475,7 +284,7 @@ export default function Editor({
       {/* Checklist Mode */}
       {mode === "checklist" && (
         <>
-          <div className="flex-1 p-6 overflow-y-auto" onClick={handleChecklistContainerClick}>
+          <div className="flex-1 p-6 overflow-y-auto">
             <div className="max-w-2xl mx-auto">
               {localChecklist.length === 0 ? (
                 <div className="text-center py-12">
@@ -490,77 +299,67 @@ export default function Editor({
               ) : (
                 <div className="space-y-1">
                   {localChecklist.map((item, index) => (
-                    <SwipeRevealRow
+                    <div
                       key={item.id}
-                      id={item.id}
-                      onDelete={() => handleDeleteItem(item.id)}
-                      closeAllSignal={closeAllSignal}
-                      onRequestCloseOthers={handleRequestCloseOthers}
-                      confirmTitle="Delete item?"
-                      confirmBody="This checklist item will be removed."
+                      className="group flex items-center gap-3 py-2.5 px-3 bg-neutral-800/50 rounded-lg hover:bg-neutral-800 transition-colors"
                     >
-                      <div
-                        data-checklist-row
-                        className="group flex items-center gap-3 py-2.5 px-3 bg-neutral-800/50 rounded-lg hover:bg-neutral-800 transition-colors"
+                      {/* Checkbox */}
+                      <button
+                        onClick={() => handleToggleItem(item.id)}
+                        className={`w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-800 ${
+                          item.done
+                            ? "bg-white border-white"
+                            : "border-neutral-500 hover:border-neutral-400"
+                        }`}
                       >
-                        {/* Checkbox */}
-                        <button
-                          onClick={() => handleToggleItem(item.id)}
-                          className={`w-5 h-5 flex-shrink-0 rounded border-2 flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-800 ${
-                            item.done
-                              ? "bg-white border-white"
-                              : "border-neutral-500 hover:border-neutral-400"
-                          }`}
-                        >
-                          {item.done && (
-                            <svg
-                              width="12"
-                              height="12"
-                              viewBox="0 0 12 12"
-                              fill="none"
-                              stroke="black"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <path d="M2 6L5 9L10 3" />
-                            </svg>
-                          )}
-                        </button>
-
-                        {/* Text Input */}
-                        <input
-                          ref={index === localChecklist.length - 1 ? newItemRef : null}
-                          data-item-index={index}
-                          type="text"
-                          value={item.text}
-                          onChange={(e) => handleUpdateItemText(item.id, e.target.value)}
-                          onKeyDown={(e) => handleKeyDown(e, item.id, index)}
-                          placeholder="Enter item..."
-                          className={`flex-1 bg-transparent text-white outline-none placeholder:text-neutral-600 focus:outline-none ${
-                            item.done ? "line-through text-neutral-400" : ""
-                          }`}
-                        />
-
-                        {/* Desktop Delete Button (hover) */}
-                        <button
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-700 opacity-0 group-hover:opacity-100 transition-all hidden md:flex"
-                          aria-label="Delete item"
-                        >
+                        {item.done && (
                           <svg
-                            width="14"
-                            height="14"
-                            viewBox="0 0 14 14"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 12 12"
                             fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
+                            stroke="black"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                           >
-                            <path d="M3 3L11 11M11 3L3 11" />
+                            <path d="M2 6L5 9L10 3" />
                           </svg>
-                        </button>
-                      </div>
-                    </SwipeRevealRow>
+                        )}
+                      </button>
+
+                      {/* Text Input */}
+                      <input
+                        ref={index === localChecklist.length - 1 ? newItemRef : null}
+                        data-item-index={index}
+                        type="text"
+                        value={item.text}
+                        onChange={(e) => handleUpdateItemText(item.id, e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, item.id, index)}
+                        placeholder="Enter item..."
+                        className={`flex-1 bg-transparent text-white outline-none placeholder:text-neutral-600 focus:outline-none ${
+                          item.done ? "line-through text-neutral-400" : ""
+                        }`}
+                      />
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => handleDeleteItem(item.id)}
+                        className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded text-neutral-500 hover:text-red-400 hover:bg-neutral-700 opacity-0 group-hover:opacity-100 transition-all"
+                        aria-label="Delete item"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 14 14"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                        >
+                          <path d="M3 3L11 11M11 3L3 11" />
+                        </svg>
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}

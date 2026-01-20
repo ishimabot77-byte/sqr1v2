@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { resetMobileViewportZoom } from "@/lib/mobileUtils";
 
 interface TabProps {
   id: string;
@@ -44,19 +43,14 @@ export default function Tab({
     } else {
       setEditValue(title);
     }
-    // Reset mobile zoom after editing
-    resetMobileViewportZoom();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      // Explicitly blur to trigger handleBlur (which includes zoom reset)
       (e.target as HTMLInputElement).blur();
     } else if (e.key === "Escape") {
       setEditValue(title);
       setIsEditing(false);
-      // Reset mobile zoom on cancel
-      resetMobileViewportZoom();
     }
   };
 
