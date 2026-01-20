@@ -18,6 +18,7 @@ import {
   EventColor, 
   EVENT_COLOR_OPTIONS 
 } from "@/lib/types";
+import { resetMobileZoom } from "@/lib/mobileUtils";
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -166,6 +167,7 @@ export default function Calendar() {
       setNewEventColor("");
       setIsAddingEvent(false);
       refreshEvents();
+      resetMobileZoom();
     }
   };
 
@@ -176,6 +178,7 @@ export default function Calendar() {
     setNewEventProjectId("");
     setNewEventColor("");
     setIsAddingEvent(false);
+    resetMobileZoom();
   };
 
   // Handle start adding event
@@ -205,6 +208,7 @@ export default function Calendar() {
     setEditDate("");
     setEditProjectId("");
     setEditColor("");
+    resetMobileZoom();
   };
 
   // Handle save edit
@@ -221,6 +225,7 @@ export default function Calendar() {
 
     handleCancelEdit();
     refreshEvents();
+    // Note: resetMobileZoom() is called inside handleCancelEdit()
   };
 
   // Handle delete event with confirmation

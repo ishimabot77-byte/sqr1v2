@@ -16,6 +16,8 @@ interface EditorProps {
   onChange: (content: string) => void;
   onModeChange: (mode: "note" | "checklist") => void;
   onChecklistChange: (checklist: ChecklistItem[]) => void;
+  /** Whether device has touch/coarse pointer (passed from parent for mobile-specific behavior) */
+  isTouch?: boolean;
 }
 
 export default function Editor({
@@ -25,6 +27,7 @@ export default function Editor({
   onChange,
   onModeChange,
   onChecklistChange,
+  isTouch = false,
 }: EditorProps) {
   const router = useRouter();
   const [localContent, setLocalContent] = useState(content);
@@ -34,6 +37,7 @@ export default function Editor({
   const isChecklistChanged = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const newItemRef = useRef<HTMLInputElement>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
   
   // Swipe management state for checklist
   const [closeAllSignal, setCloseAllSignal] = useState(0);
@@ -41,6 +45,35 @@ export default function Editor({
 
   // Check if checklist has reached the free limit
   const isAtChecklistLimit = localChecklist.length >= MAX_FREE_CHECKLIST_ITEMS;
+
+  /**
+   * Tap-outside handler for mobile: blur textarea when tapping outside it.
+   * This allows the keyboard to dismiss and makes the header accessible.
+   */
+  const handleTapOutside = useCallback((e: React.PointerEvent | React.TouchEvent) => {
+    // Only on touch devices
+    if (!isTouch) return;
+    
+    const target = e.target as HTMLElement;
+    
+    // If tapping on the textarea itself, don't blur
+    if (textareaRef.current && textareaRef.current.contains(target)) {
+      return;
+    }
+    
+    // If tapping on any input element (like checklist inputs), don't blur
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+      return;
+    }
+    
+    // If tapping on a button or interactive element, don't blur (let the button work)
+    if (target.closest('button') || target.closest('a') || target.closest('[role="button"]')) {
+      return;
+    }
+    
+    // Blur the textarea to dismiss keyboard
+    textareaRef.current?.blur();
+  }, [isTouch]);
 
   // Close all swipe rows when tapping outside
   const handleChecklistContainerClick = (e: React.MouseEvent) => {
@@ -335,7 +368,11 @@ export default function Editor({
   const isAtLimit = charCount >= MAX_CONTENT_LENGTH;
 
   return (
-    <div className="flex flex-col h-full bg-neutral-900">
+    <div 
+      ref={editorContainerRef}
+      className="flex flex-col h-full bg-neutral-900"
+      onPointerDown={handleTapOutside}
+    >
       {/* Mode Toggle */}
       <div className="flex items-center gap-2 px-6 py-3 border-b border-neutral-800">
         <div className="flex bg-neutral-800 rounded-lg p-0.5">

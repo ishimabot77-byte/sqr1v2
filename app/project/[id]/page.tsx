@@ -11,6 +11,7 @@ import {
   canAddTab,
 } from "@/lib/localStorage";
 import { Project, Tab as TabType, ChecklistItem, MAX_TABS } from "@/lib/types";
+import { resetMobileZoom } from "@/lib/mobileUtils";
 import TabBar from "@/components/TabBar";
 import Editor from "@/components/Editor";
 
@@ -24,8 +25,11 @@ export default function ProjectPage() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState("");
+  
+  // Touch device detection for mobile-specific behavior
+  const [isTouch, setIsTouch] = useState(false);
 
-  // Load project
+  // Load project and detect touch capability
   useEffect(() => {
     const loadedProject = getProject(projectId);
     if (loadedProject) {
@@ -34,17 +38,26 @@ export default function ProjectPage() {
       setTitleValue(loadedProject.title);
     }
     setIsLoaded(true);
+    
+    // Detect touch capability
+    const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+    const hasTouchPoints = navigator.maxTouchPoints > 0;
+    setIsTouch(hasCoarsePointer || hasTouchPoints);
   }, [projectId]);
 
-  // Lock page scroll while inside project editor to prevent scroll jumping in NOTE mode
+  // Lock page scroll on desktop only to prevent scroll jumping in NOTE mode
+  // On mobile, we allow normal scroll behavior for better keyboard handling
   useEffect(() => {
+    // Skip scroll lock on touch devices
+    if (isTouch) return;
+    
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     return () => {
       document.body.style.overflow = originalOverflow;
     };
-  }, []);
+  }, [isTouch]);
 
   // Get active tab
   const activeTab = project?.tabs.find((t) => t.id === activeTabId);
@@ -167,6 +180,7 @@ export default function ProjectPage() {
     if (!project || !titleValue.trim()) {
       setTitleValue(project?.title || "");
       setIsEditingTitle(false);
+      resetMobileZoom();
       return;
     }
 
@@ -174,6 +188,7 @@ export default function ProjectPage() {
     updateProject(updatedProject);
     setProject(updatedProject);
     setIsEditingTitle(false);
+    resetMobileZoom();
   };
 
   // Loading state
@@ -201,9 +216,9 @@ export default function ProjectPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-neutral-950 text-neutral-100 overflow-hidden">
-      {/* Header */}
-      <header className="flex items-center gap-4 px-4 py-3 border-b border-neutral-800 bg-neutral-950">
+    <div className={`min-h-screen flex flex-col bg-neutral-950 text-neutral-100 ${!isTouch ? 'h-screen overflow-hidden' : ''}`}>
+      {/* Header - sticky on mobile so it's always reachable */}
+      <header className="sticky top-0 z-50 flex items-center gap-4 px-4 py-3 border-b border-neutral-800 bg-neutral-950/95 backdrop-blur-sm">
         <button
           onClick={() => router.push("/")}
           className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-all"
@@ -232,6 +247,7 @@ export default function ProjectPage() {
               if (e.key === "Escape") {
                 setTitleValue(project.title);
                 setIsEditingTitle(false);
+                resetMobileZoom();
               }
             }}
             className="bg-neutral-800 px-3 py-1.5 rounded text-lg font-medium outline-none border border-neutral-600"
@@ -241,32 +257,34 @@ export default function ProjectPage() {
         ) : (
           <h1
             onClick={() => setIsEditingTitle(true)}
-            className="text-lg font-medium cursor-pointer hover:text-neutral-300 transition-colors"
+            className="text-lg font-medium cursor-pointer hover:text-neutral-300 transition-colors truncate"
           >
             {project.title}
           </h1>
         )}
 
-        <div className="ml-auto">
+        <div className="ml-auto flex-shrink-0">
           <span className="text-xs text-neutral-500">
             {project.tabs.length}/{MAX_TABS} tabs
           </span>
         </div>
       </header>
 
-      {/* Tab Bar */}
-      <TabBar
-        tabs={project.tabs}
-        activeTabId={activeTabId}
-        canAddTab={canAddTab(projectId)}
-        onSelectTab={handleSelectTab}
-        onRenameTab={handleRenameTab}
-        onDeleteTab={handleDeleteTab}
-        onAddTab={handleAddTab}
-      />
+      {/* Tab Bar - also sticky below header on mobile */}
+      <div className="sticky top-[57px] z-40 bg-neutral-950">
+        <TabBar
+          tabs={project.tabs}
+          activeTabId={activeTabId}
+          canAddTab={canAddTab(projectId)}
+          onSelectTab={handleSelectTab}
+          onRenameTab={handleRenameTab}
+          onDeleteTab={handleDeleteTab}
+          onAddTab={handleAddTab}
+        />
+      </div>
 
       {/* Editor */}
-      <div className="flex-1 overflow-hidden">
+      <div className={`flex-1 ${!isTouch ? 'overflow-hidden' : ''}`}>
         {activeTab ? (
           <Editor
             key={activeTabId}
@@ -276,6 +294,7 @@ export default function ProjectPage() {
             onChange={handleContentChange}
             onModeChange={handleModeChange}
             onChecklistChange={handleChecklistChange}
+            isTouch={isTouch}
           />
         ) : (
           <div className="flex items-center justify-center h-full text-neutral-500">

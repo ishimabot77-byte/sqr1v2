@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { resetMobileZoom } from "@/lib/mobileUtils";
 
 interface TabProps {
   id: string;
@@ -43,6 +44,8 @@ export default function Tab({
     } else {
       setEditValue(title);
     }
+    // Reset mobile zoom after editing
+    resetMobileZoom();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -51,6 +54,8 @@ export default function Tab({
     } else if (e.key === "Escape") {
       setEditValue(title);
       setIsEditing(false);
+      // Reset mobile zoom on cancel
+      resetMobileZoom();
     }
   };
 
