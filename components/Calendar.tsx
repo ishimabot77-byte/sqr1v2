@@ -532,8 +532,9 @@ export default function Calendar() {
                   onChange={(e) => setEditTitle(e.target.value)}
                   onBlur={() => resetMobileViewportZoom()}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && editTitle.trim() && editDate) {
+                    if (e.key === "Enter" && !e.shiftKey && editTitle.trim() && editDate) {
                       e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
                       handleSaveEdit();
                     }
                   }}
@@ -722,8 +723,9 @@ export default function Calendar() {
                 "
                 maxLength={100}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newEventTitle.trim()) {
+                  if (e.key === "Enter" && !e.shiftKey && newEventTitle.trim()) {
                     e.preventDefault();
+                    (e.target as HTMLInputElement).blur();
                     handleCreateEvent();
                   }
                 }}

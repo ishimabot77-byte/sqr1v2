@@ -246,7 +246,10 @@ export default function ProjectPage() {
             onChange={(e) => setTitleValue(e.target.value)}
             onBlur={handleTitleSubmit}
             onKeyDown={(e) => {
-              if (e.key === "Enter") handleTitleSubmit();
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                (e.target as HTMLInputElement).blur();
+              }
               if (e.key === "Escape") {
                 setTitleValue(project.title);
                 setIsEditingTitle(false);
