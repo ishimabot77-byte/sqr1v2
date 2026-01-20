@@ -1,9 +1,10 @@
 /**
- * Mobile utility functions for handling iOS/Android quirks
+ * Mobile utility functions for handling iOS/Android viewport quirks
  */
 
 /**
- * Detects if the current device is a touch/mobile device
+ * Detects if the current device is a touch/mobile device.
+ * Uses pointer capability detection, not screen width.
  */
 export function isTouchDevice(): boolean {
   if (typeof window === "undefined") return false;
@@ -15,41 +16,61 @@ export function isTouchDevice(): boolean {
 }
 
 /**
- * Resets mobile browser zoom that occurs when focusing on input fields.
+ * Performs the scroll nudge trick to reset viewport zoom.
+ * Called internally - use resetMobileViewportZoom() instead.
+ */
+function performScrollNudge(): void {
+  const y = window.scrollY;
+  const x = window.scrollX;
+  
+  // Scroll by 1px then back - this tricks the browser into resetting zoom
+  window.scrollTo(x, y + 1);
+  window.scrollTo(x, y);
+}
+
+/**
+ * Resets mobile browser viewport zoom that occurs when focusing on input fields.
  * 
  * On iOS Safari/Chrome and Android Chrome, when an input field is focused,
  * the browser may zoom in. This function forces the zoom to reset back to
- * normal scale by using a scroll trick.
+ * normal scale using a scroll trick.
  * 
  * Call this on:
- * - Input blur
+ * - Input blur (keyboard Done/checkmark)
  * - Form submit (Save/Cancel/Enter)
- * - Modal close
+ * - Navigation (back arrow, route changes)
+ * - Page mount (to clear any zoom from previous page)
  * 
  * Only runs on touch devices; no-op on desktop.
  */
-export function resetMobileZoom(): void {
+export function resetMobileViewportZoom(): void {
   // Only run on touch devices
   if (!isTouchDevice()) return;
   
-  // Blur any active element first
-  if (document.activeElement instanceof HTMLElement) {
-    document.activeElement.blur();
+  // Blur any active input/textarea/contenteditable element
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement) {
+    const tagName = activeElement.tagName.toLowerCase();
+    const isEditable = activeElement.isContentEditable;
+    
+    if (tagName === 'input' || tagName === 'textarea' || isEditable) {
+      activeElement.blur();
+    }
   }
   
-  // Use requestAnimationFrame to ensure we're after any focus changes
+  // Use requestAnimationFrame to ensure we're after DOM updates
   requestAnimationFrame(() => {
-    // Store current scroll position
-    const scrollY = window.scrollY;
-    const scrollX = window.scrollX;
+    performScrollNudge();
     
-    // Scroll by 1px to trigger zoom reset, then immediately restore
-    // This tricks iOS/Android into recalculating the viewport zoom
-    window.scrollTo(scrollX, scrollY + 1);
-    
-    // Restore original position after a tiny delay
+    // iOS sometimes needs a second nudge after a short delay
     setTimeout(() => {
-      window.scrollTo(scrollX, scrollY);
-    }, 10);
+      performScrollNudge();
+    }, 50);
   });
 }
+
+/**
+ * Legacy alias for backward compatibility
+ * @deprecated Use resetMobileViewportZoom() instead
+ */
+export const resetMobileZoom = resetMobileViewportZoom;

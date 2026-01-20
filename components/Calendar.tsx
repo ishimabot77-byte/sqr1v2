@@ -18,7 +18,7 @@ import {
   EventColor, 
   EVENT_COLOR_OPTIONS 
 } from "@/lib/types";
-import { resetMobileZoom } from "@/lib/mobileUtils";
+import { resetMobileViewportZoom } from "@/lib/mobileUtils";
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -167,7 +167,7 @@ export default function Calendar() {
       setNewEventColor("");
       setIsAddingEvent(false);
       refreshEvents();
-      resetMobileZoom();
+      resetMobileViewportZoom();
     }
   };
 
@@ -178,7 +178,7 @@ export default function Calendar() {
     setNewEventProjectId("");
     setNewEventColor("");
     setIsAddingEvent(false);
-    resetMobileZoom();
+    resetMobileViewportZoom();
   };
 
   // Handle start adding event
@@ -208,7 +208,7 @@ export default function Calendar() {
     setEditDate("");
     setEditProjectId("");
     setEditColor("");
-    resetMobileZoom();
+    resetMobileViewportZoom();
   };
 
   // Handle save edit
@@ -225,7 +225,7 @@ export default function Calendar() {
 
     handleCancelEdit();
     refreshEvents();
-    // Note: resetMobileZoom() is called inside handleCancelEdit()
+    // Note: resetMobileViewportZoom() is called inside handleCancelEdit()
   };
 
   // Handle delete event with confirmation
@@ -530,6 +530,13 @@ export default function Calendar() {
                   type="text"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
+                  onBlur={() => resetMobileViewportZoom()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && editTitle.trim() && editDate) {
+                      e.preventDefault();
+                      handleSaveEdit();
+                    }
+                  }}
                   placeholder="Event title..."
                   className="
                     w-full px-3 py-2 bg-neutral-700 border border-neutral-600
@@ -543,6 +550,7 @@ export default function Calendar() {
                 <textarea
                   value={editDescription}
                   onChange={(e) => setEditDescription(e.target.value)}
+                  onBlur={() => resetMobileViewportZoom()}
                   placeholder="Description (optional)..."
                   rows={2}
                   className="
@@ -704,6 +712,7 @@ export default function Calendar() {
                 type="text"
                 value={newEventTitle}
                 onChange={(e) => setNewEventTitle(e.target.value)}
+                onBlur={() => resetMobileViewportZoom()}
                 placeholder="Event title..."
                 className="
                   w-full px-3 py-2 bg-neutral-800 border border-neutral-700
@@ -714,6 +723,7 @@ export default function Calendar() {
                 maxLength={100}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && newEventTitle.trim()) {
+                    e.preventDefault();
                     handleCreateEvent();
                   }
                 }}
@@ -722,6 +732,7 @@ export default function Calendar() {
               <textarea
                 value={newEventDescription}
                 onChange={(e) => setNewEventDescription(e.target.value)}
+                onBlur={() => resetMobileViewportZoom()}
                 placeholder="Description (optional)..."
                 rows={2}
                 className="

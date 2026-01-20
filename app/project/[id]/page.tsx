@@ -11,7 +11,7 @@ import {
   canAddTab,
 } from "@/lib/localStorage";
 import { Project, Tab as TabType, ChecklistItem, MAX_TABS } from "@/lib/types";
-import { resetMobileZoom } from "@/lib/mobileUtils";
+import { isTouchDevice, resetMobileViewportZoom } from "@/lib/mobileUtils";
 import TabBar from "@/components/TabBar";
 import Editor from "@/components/Editor";
 
@@ -40,10 +40,17 @@ export default function ProjectPage() {
     setIsLoaded(true);
     
     // Detect touch capability
-    const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-    const hasTouchPoints = navigator.maxTouchPoints > 0;
-    setIsTouch(hasCoarsePointer || hasTouchPoints);
+    setIsTouch(isTouchDevice());
+    
+    // Reset viewport zoom on page mount (clears any zoom from previous page)
+    resetMobileViewportZoom();
   }, [projectId]);
+
+  // Helper to navigate with zoom reset
+  const navigateWithZoomReset = useCallback((path: string) => {
+    resetMobileViewportZoom();
+    router.push(path);
+  }, [router]);
 
   // Lock body scroll to prevent any scroll jumping - the layout handles scrolling internally
   useEffect(() => {
@@ -176,7 +183,7 @@ export default function ProjectPage() {
     if (!project || !titleValue.trim()) {
       setTitleValue(project?.title || "");
       setIsEditingTitle(false);
-      resetMobileZoom();
+      resetMobileViewportZoom();
       return;
     }
 
@@ -184,7 +191,7 @@ export default function ProjectPage() {
     updateProject(updatedProject);
     setProject(updatedProject);
     setIsEditingTitle(false);
-    resetMobileZoom();
+    resetMobileViewportZoom();
   };
 
   // Loading state
@@ -202,7 +209,7 @@ export default function ProjectPage() {
       <div className="min-h-screen flex flex-col items-center justify-center bg-neutral-950 text-neutral-100">
         <h1 className="text-2xl font-semibold mb-4">Project not found</h1>
         <button
-          onClick={() => router.push("/")}
+          onClick={() => navigateWithZoomReset("/")}
           className="px-5 py-2.5 bg-neutral-800 rounded-lg hover:bg-neutral-700 transition-colors"
         >
           Go back home
@@ -216,7 +223,7 @@ export default function ProjectPage() {
       {/* Header - flex-shrink-0 ensures it doesn't collapse */}
       <header className="flex-shrink-0 flex items-center gap-4 px-4 py-3 border-b border-neutral-800 bg-neutral-950">
         <button
-          onClick={() => router.push("/")}
+          onClick={() => navigateWithZoomReset("/")}
           className="p-2 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-all"
           aria-label="Back to projects"
         >
@@ -243,7 +250,7 @@ export default function ProjectPage() {
               if (e.key === "Escape") {
                 setTitleValue(project.title);
                 setIsEditingTitle(false);
-                resetMobileZoom();
+                resetMobileViewportZoom();
               }
             }}
             className="bg-neutral-800 px-3 py-1.5 rounded text-lg font-medium outline-none border border-neutral-600"

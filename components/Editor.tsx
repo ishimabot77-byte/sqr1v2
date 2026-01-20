@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { MAX_CONTENT_LENGTH, ChecklistItem } from "@/lib/types";
 import { generateId } from "@/lib/localStorage";
+import { resetMobileViewportZoom } from "@/lib/mobileUtils";
 import SwipeRevealRow from "@/components/SwipeRevealRow";
 
 // Free tier limit for checklist items per tab
@@ -71,8 +72,9 @@ export default function Editor({
       return;
     }
     
-    // Blur the textarea to dismiss keyboard
+    // Blur the textarea to dismiss keyboard and reset zoom
     textareaRef.current?.blur();
+    resetMobileViewportZoom();
   }, [isTouch]);
 
   // Close all swipe rows when tapping outside

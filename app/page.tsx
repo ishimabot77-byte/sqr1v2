@@ -10,6 +10,7 @@ import {
   canCreateProject,
 } from "@/lib/localStorage";
 import { Project, MAX_PROJECTS } from "@/lib/types";
+import { isTouchDevice, resetMobileViewportZoom } from "@/lib/mobileUtils";
 import SwipeRevealRow from "@/components/SwipeRevealRow";
 
 export default function HomePage() {
@@ -35,14 +36,17 @@ export default function HomePage() {
     setIsLoaded(true);
     
     // Detect touch capability after mount (client-side only)
-    const detectTouch = () => {
-      const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
-      const hasTouchPoints = navigator.maxTouchPoints > 0;
-      setIsTouch(hasCoarsePointer || hasTouchPoints);
-    };
+    setIsTouch(isTouchDevice());
     
-    detectTouch();
+    // Reset viewport zoom on page mount (clears any zoom from previous page)
+    resetMobileViewportZoom();
   }, []);
+
+  // Helper to navigate with zoom reset
+  const navigateWithZoomReset = useCallback((path: string) => {
+    resetMobileViewportZoom();
+    router.push(path);
+  }, [router]);
 
   // Close all swipe rows when tapping outside
   const handleContainerClick = (e: React.MouseEvent) => {
@@ -71,7 +75,7 @@ export default function HomePage() {
       setProjects(getProjects());
       setNewProjectTitle("");
       setIsCreating(false);
-      router.push(`/project/${project.id}`);
+      navigateWithZoomReset(`/project/${project.id}`);
     }
   };
 
@@ -249,7 +253,7 @@ export default function HomePage() {
               >
                 <div
                   data-swipe-row
-                  onClick={() => router.push(`/project/${project.id}`)}
+                  onClick={() => navigateWithZoomReset(`/project/${project.id}`)}
                   className="
                     group flex items-center justify-between
                     px-5 py-4 bg-neutral-900 border border-neutral-800
